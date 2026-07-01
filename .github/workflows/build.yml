@@ -1,0 +1,72 @@
+name: Minimal OpenWrt (LuCI + Sing-box)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential clang flex bison g++ gawk \
+          gcc-multilib gettext git libncurses-dev libssl-dev \
+          python3 unzip wget
+
+      - name: Clone OpenWrt
+        run: |
+          git clone https://github.com/openwrt/openwrt.git
+          cd openwrt
+          git checkout v24.10.5
+
+      - name: Update feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Minimal config (LuCI + Sing-box)
+        run: |
+          cd openwrt
+          cat > .config << 'EOF'
+          CONFIG_TARGET_mediatek=y
+          CONFIG_TARGET_mediatek_filogic=y
+          CONFIG_TARGET_mediatek_filogic_DEVICE_cudy_wr3000-v1=y
+
+          # LuCI (پنل وب)
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-ssl=y
+
+          # VPN / Tunnel base
+          CONFIG_PACKAGE_kmod-tun=y
+
+          # Sing-box (VLESS core)
+          CONFIG_PACKAGE_sing-box=y
+
+          # WireGuard (اختیاری ولی مفید)
+          CONFIG_PACKAGE_kmod-wireguard=y
+          CONFIG_PACKAGE_wireguard-tools=y
+          CONFIG_PACKAGE_luci-proto-wireguard=y
+
+          # basic tools
+          CONFIG_PACKAGE_ca-bundle=y
+          CONFIG_PACKAGE_ip-full=y
+          EOF
+
+      - name: Build firmware
+        run: |
+          cd openwrt
+          make defconfig
+          make download -j8
+          make -j$(nproc)
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-firmware
+          path: openwrt/bin/targets/**/*
